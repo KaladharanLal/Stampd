@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Add a Destination — Stampd{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8"
+     x-data="{
+       name: '',
+       country: '',
+       countryCode: '',
+       continent: 'Asia',
+       blurb: '',
+       tags: [],
+       lat: 20.0,
+       lng: 78.0,
+       posterFrom: '#171e26',
+       posterTo: '#0e1318',
+       mapPinned: false,
+       submitting: false,
+
+       continents: ['Asia', 'Europe', 'Americas', 'Africa', 'Oceania'],
+       availableTags: ['mountains', 'beaches', 'city', 'food', 'heritage', 'nature', 'nightlife', 'adventure', 'spiritual', 'offbeat'],
+
+       colorPresets: [
+         { from: '#1a3a5c', to: '#0d1f35' },
+         { from: '#2e1760', to: '#0f0830' },
+         { from: '#1b4332', to: '#081c14' },
+         { from: '#7f1d1d', to: '#2d0707' },
+         { from: '#1e3a5f', to: '#0b1a2e' },
+         { from: '#312e81', to: '#1e1b4b' },
+         { from: '#065f46', to: '#022c22' },
+         { from: '#7c2d12', to: '#431407' },
+         { from: '#1d4ed8', to: '#0f2460' },
+         { from: '#6d28d9', to: '#2e1065' },
+         { from: '#0f766e', to: '#042f2e' },
+         { from: '#b45309', to: '#451a03' },
+       ],
+
+       toggleTag(t) {
+         if (this.tags.includes(t)) this.tags = this.tags.filter(x => x !== t);
+         else this.tags.push(t);
+       },
+
+       selectPreset(p) {
+         this.posterFrom = p.from;
+         this.posterTo = p.to;
+       },
+
+       async submit() {
+         if (!this.name.trim() || !this.country.trim()) {
+           window.showToast('Name and country are required', 'error');
+           return;
+         }
+         if (!this.mapPinned) {
+           window.showToast('Please pin the location on the map first', 'error');
+           return;
+         }
+         this.submitting = true;
+         try {
+           const slug = this.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+           const res = await fetch('/api/destinations/add', {
+             method: 'POST',
+             headers: {'Content-Type': 'application/json'},
+             body: JSON.stringify({
+               slug,
+               name: this.name,
+               country: this.country,
+               country_code: this.countryCode.toUpperCase().slice(0, 3),
+               continent: this.continent,
+               lat: this.lat,
+               lng: this.lng,
+               tags: this.tags,
+               blurb: this.blurb,
+               poster_from: this.posterFrom,
+               poster_to: this.posterTo
+             })
+           });
+           const data = await res.json();
+           if (data.slug) {
+             window.showToast('Destination added! 🌍', 'success');
+             setTimeout(() => window.location.href = '/destinations/' + data.slug, 1000);
+           } else {
+             window.showToast(data.detail || 'Failed to add destination', 'error');
+           }
+         } catch(e) {
+           window.showToast('Network error', 'error');
+         } finally {
+           this.submitting = false;
+         }
+       },
+
+       init() {
+         // Map initialized after DOM in extra_head
+       }
+     }">
+
+  <!-- Header -->
+  <div class="border-b border-white/5 pb-4">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="font-mono text-xs text-[#00e054] font-bold">ADD SPOT</span>
+      <span class="text-xs text-[#8a97a6]">• contribute a destination to stampd</span>
+    </div>
+    <h1 class="font-display font-black text-3xl sm:text-4xl text-white tracking-tight">add a destination</h1>
+    <p class="text-sm text-[#8a97a6] mt-1 font-mono">pin it on the map, fill in the details, and it'll be available to log instantly.</p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+    <!-- Left: Form -->
+    <div class="space-y-5">
+
+      <!-- Name & Country -->
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-mono text-[#8a97a6] mb-1.5">destination name *</label>
+          <input type="text" x-model="name" placeholder="e.g. Hampi"
+                 class="w-full bg-[#171e26] border border-white/10 rounded-lg p-2.5 text-sm text-white placeholder-[#8a97a6]/50 focus:border-[#ff8a3d] focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-mono text-[#8a97a6] mb-1.5">country *</label>
+          <input type="text" x-model="country" placeholder="India"
+                 class="w-full bg-[#171e26] border border-white/10 rounded-lg p-2.5 text-sm text-white placeholder-[#8a97a6]/50 focus:border-[#ff8a3d] focus:outline-none">
+        </div>
+      </div>
+
+      <!-- Country Code & Continent -->
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-mono text-[#8a97a6] mb-1.5">country code (2-3 letters)</label>
+          <input type="text" x-model="countryCode" maxlength="3" placeholder="IN"
+                 class="w-full bg-[#171e26] border border-white/10 rounded-lg p-2.5 text-sm text-white uppercase placeholder-[#8a97a6]/50 focus:border-[#ff8a3d] focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-mono text-[#8a97a6] mb-1.5">continent</label>
+          <select x-model="continent"
+                  class="w-full bg-[#171e26] border border-white/10 rounded-lg p-2.5 text-sm text-white focus:border-[#ff8a3d] focus:outline-none">
+            <template x-for="c in continents" :key="c">
+              <option :value="c" x-text="c"></option>
+            </template>
+          </select>
+        </div>
+      </div>
+
+      <!-- Blurb -->
+      <div>
+        <label class="block text-xs font-mono text-[#8a97a6] mb-1.5">short description</label>
+        <textarea x-model="blurb" rows="2" placeholder="A sentence or two about what makes this place special..."
+                  class="w-full bg-[#171e26] border border-white/10 rounded-lg p-2.5 text-sm text-white placeholder-[#8a97a6]/50 focus:border-[#ff8a3d] focus:outline-none resize-none"></textarea>
+      </div>
+
+      <!-- Vibe Tags -->
+      <div>
+        <label class="block text-xs font-mono text-[#8a97a6] mb-2">vibe tags (pick up to 4)</label>
+        <div class="flex flex-wrap gap-1.5">
+          <template x-for="t in availableTags" :key="t">
+            <button type="button" @click="toggleTag(t)"
+                    class="text-xs px-2.5 py-1 rounded-full border transition-all"
+                    :class="tags.includes(t)
+                      ? 'bg-[#ff8a3d]/20 border-[#ff8a3d] text-[#ff8a3d] font-medium'
+                      : 'bg-[#171e26] border-white/10 text-[#8a97a6] hover:border-white/25'">
+              <span x-text="'#' + t"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Poster Color -->
+      <div>
+        <label class="block text-xs font-mono text-[#8a97a6] mb-2">poster gradient</label>
+        <div class="grid grid-cols-6 gap-2 mb-3">
+          <template x-for="(p, i) in colorPresets" :key="i">
+            <button type="button" @click="selectPreset(p)"
+                    class="aspect-square rounded-lg border-2 transition-all"
+                    :style="'background: linear-gradient(135deg, ' + p.from + ', ' + p.to + ');'"
+                    :class="posterFrom === p.from ? 'border-white scale-110' : 'border-transparent hover:border-white/40'">
+            </button>
+          </template>
+        </div>
+        <!-- Live Poster Preview -->
+        <div class="flex items-center gap-4">
+          <div class="w-20 h-28 rounded-xl flex flex-col justify-between p-2.5 border border-white/10 flex-shrink-0"
+               :style="'background: linear-gradient(145deg, ' + posterFrom + ', ' + posterTo + ');'">
+            <span class="text-[9px] font-mono text-white/70 uppercase bg-black/30 px-1 py-0.5 rounded self-start" x-text="countryCode || 'XX'"></span>
+            <div>
+              <p class="font-display font-bold text-sm text-white leading-tight" x-text="name || 'Destination'"></p>
+              <p class="text-[9px] text-white/60 font-mono" x-text="country || 'Country'"></p>
+            </div>
+          </div>
+          <p class="text-xs text-[#8a97a6] font-mono">live poster preview → pick a gradient that matches the destination's mood.</p>
+        </div>
+      </div>
+
+      <!-- Coordinates display -->
+      <div class="bg-[#171e26] border border-white/5 rounded-xl p-3 flex items-center justify-between text-xs font-mono">
+        <span class="text-[#8a97a6]">pinned coordinates:</span>
+        <span class="text-[#00e054] font-bold" x-text="mapPinned ? lat.toFixed(4) + '° N, ' + lng.toFixed(4) + '° E' : 'click the map to pin →'"></span>
+      </div>
+
+      <!-- Submit -->
+      <button type="button" @click="submit()" :disabled="submitting"
+              class="w-full py-3.5 bg-[#ff8a3d] hover:bg-[#ff8a3d]/90 text-black font-display font-bold text-sm rounded-xl transition-all shadow-lg shadow-[#ff8a3d]/20 flex items-center justify-center gap-2">
+        <span x-show="!submitting">add destination to stampd →</span>
+        <span x-show="submitting" class="animate-pulse">adding destination...</span>
+      </button>
+
+    </div>
+
+    <!-- Right: Map -->
+    <div class="space-y-3">
+      <div>
+        <label class="block text-xs font-mono text-[#40bcf4] mb-1.5 font-bold">📍 click on map to pin location *</label>
+        <div id="add-dest-map" class="h-96 lg:h-full min-h-[420px] rounded-2xl overflow-hidden border border-white/10 shadow-xl"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const map = L.map('add-dest-map', {
+    center: [20.0, 78.0],
+    zoom: 4,
+    scrollWheelZoom: true
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 18
+  }).addTo(map);
+
+  let pinMarker = null;
+
+  map.on('click', (e) => {
+    const { lat, lng } = e.latlng;
+
+    // Remove old marker
+    if (pinMarker) map.removeLayer(pinMarker);
+
+    const pinIcon = L.divIcon({
+      className: 'pulsing-map-pin',
+      html: '<div class="pin-pulse"></div><div class="pin-core"></div>',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    pinMarker = L.marker([lat, lng], { icon: pinIcon })
+      .addTo(map)
+      .bindPopup('<div style="padding:8px; font-family:sans-serif;"><div style="color:#ff8a3d;font-size:11px;font-family:monospace">PINNED LOCATION</div><div style="color:white;font-weight:bold">' + lat.toFixed(4) + '°, ' + lng.toFixed(4) + '°</div></div>')
+      .openPopup();
+
+    // Update Alpine data
+    const alpineEl = document.querySelector('[x-data]');
+    if (alpineEl && alpineEl._x_dataStack) {
+      const data = Alpine.$data(alpineEl) || Alpine.raw(alpineEl._x_dataStack[0]);
+      if (data) {
+        data.lat = Math.round(lat * 10000) / 10000;
+        data.lng = Math.round(lng * 10000) / 10000;
+        data.mapPinned = true;
+      }
+    }
+    // Fallback: direct store update via global
+    window._addDestLat = lat;
+    window._addDestLng = lng;
+
+    // Also try Alpine.$data approach
+    try {
+      const comp = document.querySelector('.max-w-4xl[x-data]');
+      if (comp) {
+        const d = Alpine.$data(comp);
+        d.lat = Math.round(lat * 10000) / 10000;
+        d.lng = Math.round(lng * 10000) / 10000;
+        d.mapPinned = true;
+      }
+    } catch(err) {}
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}{{ destination.name }} — Stampd{% endblock %}
+
+{% block content %}
+<div class="pb-20">
+
+  <!-- Dramatic Gradient Poster Header -->
+  <section class="relative overflow-hidden pt-16 pb-20 border-b border-white/5"
+           style="background: linear-gradient(160deg, {{ destination.poster_from }} 0%, {{ destination.poster_to }} 65%, #0e1318 100%);">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      
+      <div class="flex flex-col md:flex-row items-start justify-between gap-8">
+        
+        <!-- Left: Destination Identity -->
+        <div class="space-y-4 max-w-2xl">
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-1 rounded bg-black/40 backdrop-blur-md text-xs font-mono tracking-widest text-[#ff8a3d] border border-white/10 uppercase">
+              {{ destination.country_code }} • {{ destination.continent }}
+            </span>
+            <span class="text-xs font-mono text-white/60">
+              {{ destination.lat }}° N, {{ destination.lng }}° E
+            </span>
+          </div>
+
+          <h1 class="text-4xl sm:text-6xl md:text-7xl font-display font-black text-white tracking-tight drop-shadow-lg">
+            {{ destination.name }}
+          </h1>
+
+          <p class="text-lg text-white/80 font-mono">
+            {{ destination.country }}
+          </p>
+
+          <p class="text-base text-white/90 leading-relaxed font-sans max-w-xl pt-2">
+            {{ destination.blurb }}
+          </p>
+
+          <!-- Vibe Tag Chips -->
+          <div class="flex flex-wrap gap-2 pt-2">
+            {% for t in destination.tags %}
+            <a href="/explore?tag={{ t }}" class="px-3 py-1 rounded-full bg-black/30 backdrop-blur-md border border-white/10 text-xs font-mono text-white hover:border-[#ff8a3d] transition-colors">
+              #{{ t }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Right: Primary Stats Highlight -->
+        <div class="bg-[#171e26]/85 backdrop-blur-md border border-white/10 rounded-2xl p-6 w-full md:w-80 flex flex-col gap-4 shadow-2xl">
+          <div class="flex items-center justify-between pb-4 border-b border-white/5">
+            <div>
+              <div class="text-[11px] font-mono text-[#8a97a6] uppercase tracking-wider">average rating</div>
+              <div class="flex items-baseline gap-2 mt-1">
+                <span class="text-3xl font-display font-black text-white">
+                  {{ destination.avg_rating if destination.avg_rating > 0 else '—' }}
+                </span>
+                <span class="text-[#00e054] text-lg">★</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-[11px] font-mono text-[#8a97a6] uppercase tracking-wider">stamped visits</div>
+              <div class="text-3xl font-display font-black text-[#ff8a3d] mt-1">
+                {{ destination.visit_count }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex flex-col gap-2 pt-1">
+            <button 
+              type="button"
+              onclick="openLogModal('{{ destination.slug }}', '{{ destination.name }}', '{{ destination.country }}')"
+              class="w-full py-3 bg-[#ff8a3d] hover:bg-[#ff8a3d]/90 text-black font-display font-bold text-sm rounded-xl transition-all shadow-lg shadow-[#ff8a3d]/20 flex items-center justify-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path>
+              </svg>
+              <span>log this destination</span>
+            </button>
+
+            <button 
+              type="button"
+              onclick="toggleBucket('{{ destination.slug }}', this)"
+              class="w-full py-2.5 bg-[#1f2832] hover:bg-white/10 text-white font-mono text-xs rounded-xl transition-all border border-white/10 flex items-center justify-center gap-2">
+              <span>📌</span>
+              <span>add to bucket list</span>
+            </button>
+
+            <button 
+              type="button"
+              onclick="navigator.clipboard.writeText(window.location.href); showToast('Link copied to clipboard! 📋');"
+              class="w-full py-2 bg-transparent hover:bg-white/5 text-[#8a97a6] hover:text-white font-mono text-xs rounded-lg transition-colors text-center">
+              share spot
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Body Content: Histogram, Mini Map & Reviews -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 grid grid-cols-1 lg:grid-cols-3 gap-10">
+    
+    <!-- Left 2 Cols: Rating Histogram & Reviews Feed -->
+    <div class="lg:col-span-2 space-y-10">
+
+      <!-- Rating Histogram (Letterboxd Style) -->
+      <div class="bg-[#171e26] border border-white/5 rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-4 pb-2 border-b border-white/5">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-xs text-[#00e054] font-bold">01</span>
+            <h2 class="font-display font-bold text-lg text-white lowercase">ratings breakdown</h2>
+          </div>
+          <span class="text-xs font-mono text-[#8a97a6]">0.5 to 5.0 stars</span>
+        </div>
+
+        {% set max_count = 1 %}
+        {% for score, count in destination.histogram.items() %}
+          {% if count > max_count %}
+            {% set max_count = count %}
+          {% endif %}
+        {% endfor %}
+
+        <!-- CSS Bar Histogram -->
+        <div class="flex items-end gap-1.5 sm:gap-2 h-28 pt-4 px-2">
+          {% for score, count in destination.histogram.items() %}
+          <div class="flex-1 flex flex-col items-center h-full justify-end group relative">
+            
+            <!-- Tooltip -->
+            <div class="absolute -top-7 opacity-0 group-hover:opacity-100 transition-opacity bg-black text-white text-[10px] font-mono px-1.5 py-0.5 rounded pointer-events-none whitespace-nowrap">
+              {{ score }} ★ : {{ count }}
+            </div>
+
+            <!-- Bar -->
+            <div class="w-full bg-[#1f2832] group-hover:bg-[#00e054] rounded-t transition-colors duration-150"
+                 style="height: {{ (count / max_count * 100) if count > 0 else 4 }}%;"></div>
+            
+            <span class="text-[9px] font-mono text-[#8a97a6] mt-1.5">
+              {{ score if score in ['1.0', '2.0', '3.0', '4.0', '5.0'] else '' }}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Reviews Section -->
+      <div>
+        <div class="flex items-center justify-between mb-6 pb-2 border-b border-white/5">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-xs text-[#ff8a3d] font-bold">02</span>
+            <h2 class="font-display font-bold text-xl text-white lowercase">traveler reviews ({{ destination.reviews|length }})</h2>
+          </div>
+          <button 
+            onclick="openLogModal('{{ destination.slug }}', '{{ destination.name }}', '{{ destination.country }}')"
+            class="text-xs font-mono text-[#ff8a3d] hover:underline">
+            write a review +
+          </button>
+        </div>
+
+        {% if destination.reviews %}
+        <div class="space-y-4">
+          {% for r in destination.reviews %}
+          <div class="bg-[#171e26] border border-white/5 rounded-xl p-5 hover:border-white/10 transition-colors">
+            
+            <div class="flex items-start justify-between gap-4 mb-3">
+              <div class="flex items-center gap-3">
+                <a href="/profile/{{ r.username }}" 
+                   class="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs text-black"
+                   style="background-color: {{ r.accent }};">
+                  {{ r.username[0]|upper }}
+                </a>
+                <div>
+                  <a href="/profile/{{ r.username }}" class="font-display font-medium text-sm text-white hover:text-[#ff8a3d] transition-colors">
+                    {{ r.display_name }}
+                  </a>
+                  <div class="text-[11px] font-mono text-[#8a97a6]">
+                    @{{ r.username }} • visited {{ r.visited_on }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Rating Badge -->
+              <div class="flex items-center gap-1 text-xs text-[#00e054] font-mono font-bold bg-[#0e1318] px-2.5 py-1 rounded">
+                <span>★</span>
+                <span>{{ r.rating }}</span>
+              </div>
+            </div>
+
+            <!-- Review Body -->
+            {% if r.review %}
+            <p class="text-sm text-[#e8edf2] leading-relaxed mb-3">
+              {{ r.review }}
+            </p>
+            {% endif %}
+
+            <!-- Review Footer -->
+            <div class="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-[#8a97a6]">
+              <div class="flex items-center gap-3">
+                {% if r.would_return %}
+                <span class="text-[11px] text-[#00e054] font-mono flex items-center gap-1">
+                  <span>✓</span> would return
+                </span>
+                {% endif %}
+                <div class="flex gap-1.5">
+                  {% for t in r.tags %}
+                  <span class="text-[10px] font-mono text-[#8a97a6]">#{{ t }}</span>
+                  {% endfor %}
+                </div>
+              </div>
+
+              <button 
+                type="button" 
+                onclick="fetch('/api/reviews/{{ r.id }}/like?username=' + (localStorage.getItem('stampd_user') || 'nobi'), {method: 'POST'}).then(r => r.json()).then(d => { showToast(d.liked ? 'Liked review ❤️' : 'Unliked review'); });"
+                class="hover:text-red-400 transition-colors flex items-center gap-1 font-mono text-[11px]">
+                <span>♥</span>
+                <span>like</span>
+              </button>
+            </div>
+
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="bg-[#171e26] border border-white/5 rounded-xl p-8 text-center text-xs text-[#8a97a6]">
+          No reviews yet for {{ destination.name }}. Be the first to log a review!
+        </div>
+        {% endif %}
+
+      </div>
+
+    </div>
+
+    <!-- Right Col: Interactive Mini Map & Quick Info -->
+    <div class="space-y-6">
+      
+      <!-- Mini Map (Leaflet) -->
+      <div class="bg-[#171e26] border border-white/5 rounded-2xl p-4 overflow-hidden">
+        <div class="flex items-center justify-between mb-3 px-1">
+          <span class="text-xs font-mono text-[#40bcf4] font-bold">location pin</span>
+          <span class="text-[11px] font-mono text-[#8a97a6]">{{ destination.lat }}, {{ destination.lng }}</span>
+        </div>
+        
+        <div id="dest-mini-map" class="h-64 rounded-xl border border-white/10 z-0"></div>
+      </div>
+
+      <!-- Quick Stamp Preview Card -->
+      <div class="bg-[#171e26] border border-white/5 rounded-2xl p-5 text-center">
+        <span class="text-[11px] font-mono text-[#8a97a6] uppercase tracking-wider block mb-3">passport stamp</span>
+        <div class="stamp-badge py-4 px-6 border-2 transform rotate-[-3deg] inline-block shadow-lg">
+          <div class="text-[10px] font-mono text-[#8a97a6] tracking-widest">{{ destination.country_code }} • DEPARTURE</div>
+          <div class="text-xl font-display font-black text-[#ff8a3d] my-1">{{ destination.name }}</div>
+          <div class="text-[10px] font-mono text-[#00e054]">VERIFIED DESTINATION</div>
+        </div>
+        <p class="text-[11px] text-[#8a97a6] mt-3">Log a visit to stamp this into your profile.</p>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+<!-- Leaflet Mini Map Initializer -->
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const lat = {{ destination.lat }};
+    const lng = {{ destination.lng }};
+    
+    const map = L.map('dest-mini-map', {
+      zoomControl: true,
+      attributionControl: false
+    }).setView([lat, lng], 10);
+
+    // Dark CARTO tile layer (offline fallback friendly)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 18,
+      subdomains: 'abcd'
+    }).addTo(map);
+
+    // Custom circle marker
+    const marker = L.circleMarker([lat, lng], {
+      color: '#ff8a3d',
+      fillColor: '#ff8a3d',
+      fillOpacity: 0.8,
+      radius: 8
+    }).addTo(map);
+
+    marker.bindPopup("<strong style='color:#0e1318;'>{{ destination.name }}</strong><br><span style='color:#666;'>{{ destination.country }}</span>").openPopup();
+  });
+</script>
+{% endblock %}

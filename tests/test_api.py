@@ -101,3 +101,27 @@ def test_travel_lists_api():
         assert len(lists) >= 2
         titles = [l["title"] for l in lists]
         assert "Monsoon Escapes in Kerala" in titles
+
+def test_toggle_follow_api():
+    from app.routers.users import toggle_follow
+    with Session(engine) as session:
+        # nobi follows maya
+        res1 = toggle_follow(username="maya", follower_username="nobi", session=session)
+        assert res1["following"] in (True, False)
+        # toggle again reverts
+        res2 = toggle_follow(username="maya", follower_username="nobi", session=session)
+        assert res2["following"] != res1["following"]
+
+def test_profile_page_rendering():
+    from starlette.requests import Request
+    from app.routers.pages import profile_page
+    with Session(engine) as session:
+        req = Request({"type": "http", "method": "GET", "path": "/profile/nobi", "headers": []})
+        resp = profile_page("nobi", req, session)
+        assert resp.status_code == 200
+        content = resp.body.decode("utf-8")
+        assert "nobi" in content
+        assert "where i&#39;ve been" in content or "where i've been" in content
+        assert "my passport stamps" in content
+        assert "travel dna" in content
+

@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import JSONResponse
 
 from app.db import init_db
-from app.routers import destinations, visits, users, lists
+from app.routers import destinations, visits, users, lists, pages
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -42,6 +42,7 @@ app.include_router(destinations.router)
 app.include_router(visits.router)
 app.include_router(users.router)
 app.include_router(lists.router)
+app.include_router(pages.router)
 
 @app.get("/api/health")
 def health_check():
@@ -52,14 +53,3 @@ def health_check():
         "version": "1.0.0"
     }
 
-@app.get("/")
-def home_redirect():
-    return {
-        "message": "Welcome to Stampd API — Letterboxd for travelers",
-        "docs": "/docs",
-        "endpoints": [
-            "/api/destinations",
-            "/api/users/nobi/stats",
-            "/api/feed"
-        ]
-    }

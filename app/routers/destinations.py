@@ -1,10 +1,50 @@
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, func
+from pydantic import BaseModel
 from app.db import get_session
-from app.models import Destination, Visit, User, parse_tags
+from app.models import Destination, Visit, User, parse_tags, dump_tags
 
 router = APIRouter(prefix="/api/destinations", tags=["destinations"])
+
+class DestinationCreate(BaseModel):
+    slug: str
+    name: str
+    country: str
+    country_code: str
+    continent: str
+    lat: float
+    lng: float
+    tags: List[str] = []
+    blurb: str = ""
+    poster_from: str = "#171e26"
+    poster_to: str = "#0e1318"
+
+@router.post("/add")
+def add_destination(payload: DestinationCreate, session: Session = Depends(get_session)) -> Dict[str, Any]:
+    # Check for duplicate slug
+    existing = session.exec(select(Destination).where(Destination.slug == payload.slug)).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Destination with slug '{payload.slug}' already exists")
+
+    dest = Destination(
+        slug=payload.slug,
+        name=payload.name,
+        country=payload.country,
+        country_code=payload.country_code.upper(),
+        continent=payload.continent,
+        lat=payload.lat,
+        lng=payload.lng,
+        tags=dump_tags(payload.tags),
+        blurb=payload.blurb,
+        poster_from=payload.poster_from,
+        poster_to=payload.poster_to
+    )
+    session.add(dest)
+    session.commit()
+    session.refresh(dest)
+    return {"id": dest.id, "slug": dest.slug, "name": dest.name, "success": True}
+
 
 @router.get("")
 def list_destinations(

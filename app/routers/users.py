@@ -20,7 +20,7 @@ def list_users(session: Session = Depends(get_session)) -> List[Dict[str, Any]]:
     } for u in users]
 
 @router.get("/users/{username}")
-def get_user_profile(username: str, session: Session = Depends(get_session)) -> Dict[str, Any]:
+def get_user_profile(username: str, current_user: Optional[str] = None, session: Session = Depends(get_session)) -> Dict[str, Any]:
     user = session.exec(select(User).where(User.username == username)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -29,6 +29,12 @@ def get_user_profile(username: str, session: Session = Depends(get_session)) -> 
     bucket_count = len(session.exec(select(BucketItem).where(BucketItem.user_id == user.id)).all())
     followers_count = len(session.exec(select(Follow).where(Follow.following_id == user.id)).all())
     following_count = len(session.exec(select(Follow).where(Follow.follower_id == user.id)).all())
+
+    is_following = False
+    if current_user and current_user != username:
+        curr = session.exec(select(User).where(User.username == current_user)).first()
+        if curr:
+            is_following = bool(session.exec(select(Follow).where(Follow.follower_id == curr.id, Follow.following_id == user.id)).first())
 
     return {
         "id": user.id,
@@ -42,7 +48,8 @@ def get_user_profile(username: str, session: Session = Depends(get_session)) -> 
         "visits_count": visits_count,
         "bucket_count": bucket_count,
         "followers_count": followers_count,
-        "following_count": following_count
+        "following_count": following_count,
+        "is_following": is_following
     }
 
 @router.get("/users/{username}/stats")

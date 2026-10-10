@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Stampd — Letterboxd for Travelers{% endblock %}</title>
+  <meta name="description" content="Log destinations, collect passport stamps, discover where friends are exploring. Stampd is the social travel diary.">
+  <meta property="og:title" content="Stampd — Letterboxd for Travelers">
+  <meta property="og:description" content="Your passport to social travel. Log spots, collect stamps, see where friends are going.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗺️</text></svg>">
+  <style>[x-cloak] { display: none !important; }</style>
+  
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            bg: '#0e1318',
+            surface: '#171e26',
+            'surface-2': '#1f2832',
+            txt: '#e8edf2',
+            muted: '#8a97a6',
+            accent: '#ff8a3d',
+            star: '#00e054',
+            sky: '#40bcf4'
+          },
+          fontFamily: {
+            display: ['"Space Grotesk"', 'sans-serif'],
+            sans: ['Inter', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Local Leaflet & Leaflet-heat Assets -->
+  <link rel="stylesheet" href="/static/vendor/leaflet.css">
+  <script src="/static/vendor/leaflet.js"></script>
+  <script src="/static/vendor/leaflet-heat.js"></script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/static/css/app.css">
+
+  <!-- Alpine.js (vendored offline) -->
+  <script defer src="/static/vendor/alpine.min.js"></script>
+  <script src="/static/js/app.js"></script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-[#0e1318] text-[#e8edf2] min-h-screen flex flex-col antialiased selection:bg-[#ff8a3d] selection:text-white"
+      x-data="{ mobileMenuOpen: false }">
+
+  <!-- Top Navigation -->
+  <header class="sticky top-0 z-40 bg-[#0e1318]/90 backdrop-blur-md border-b border-white/5">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      
+      <!-- Logo: Three Dots + lowercase display -->
+      <a href="/" class="flex items-center gap-3 group">
+        <div class="flex items-center gap-1.5">
+          <span class="w-3 h-3 rounded-full bg-[#ff8a3d] group-hover:scale-110 transition-transform"></span>
+          <span class="w-3 h-3 rounded-full bg-[#00e054] group-hover:scale-110 transition-transform delay-75"></span>
+          <span class="w-3 h-3 rounded-full bg-[#40bcf4] group-hover:scale-110 transition-transform delay-150"></span>
+        </div>
+        <span class="font-display font-bold text-2xl tracking-tight text-white group-hover:text-[#ff8a3d] transition-colors">stampd</span>
+      </a>
+
+      <!-- Search with Live Results (Alpine.js) -->
+      <div class="flex-1 max-w-md hidden md:block relative" 
+           x-data="{ query: '', results: [], open: false, loading: false }"
+           @click.away="open = false">
+        <div class="relative">
+          <input 
+            type="text" 
+            placeholder="Search destinations, countries, vibes..." 
+            x-model="query"
+            @focus="if(query.length >= 2) open = true"
+            @input.debounce.250ms="
+              if (query.trim().length >= 2) {
+                loading = true;
+                fetch('/api/destinations?q=' + encodeURIComponent(query))
+                  .then(r => r.json())
+                  .then(d => { results = d.slice(0, 5); open = true; loading = false; });
+              } else {
+                results = []; open = false; loading = false;
+              }
+            "
+            class="w-full bg-[#171e26] border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm text-[#e8edf2] placeholder-[#8a97a6] focus:outline-none focus:border-[#ff8a3d] focus:ring-1 focus:ring-[#ff8a3d] transition-all"
+          >
+          <svg class="w-4 h-4 text-[#8a97a6] absolute left-3.5 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+          <span x-show="loading" class="absolute right-3.5 top-3 text-xs text-[#8a97a6] animate-pulse">searching...</span>
+        </div>
+
+        <!-- Search Results Dropdown -->
+        <div x-show="open && results.length > 0" 
+             x-transition 
+             class="absolute left-0 right-0 top-12 bg-[#171e26] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 divide-y divide-white/5">
+          <template x-for="item in results" :key="item.slug">
+            <a :href="'/destinations/' + item.slug" 
+               class="flex items-center justify-between p-3 hover:bg-[#1f2832] transition-colors group">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-10 rounded text-center text-xs font-mono font-bold flex items-center justify-center text-white"
+                     :style="'background: linear-gradient(135deg, ' + item.poster_from + ', ' + item.poster_to + ')'">
+                  <span x-text="item.country_code"></span>
+                </div>
+                <div>
+                  <div class="font-display font-medium text-white group-hover:text-[#ff8a3d] text-sm" x-text="item.name"></div>
+                  <div class="text-xs text-[#8a97a6]" x-text="item.country + ' • ' + item.continent"></div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1 text-xs text-[#00e054] font-mono">
+                <span>★</span>
+                <span x-text="item.avg_rating || '—'"></span>
+              </div>
+            </a>
+          </template>
+        </div>
+      </div>
+
+      <!-- Nav Links & Quick Actions -->
+      <nav class="flex items-center gap-3 sm:gap-5">
+        <a href="/explore" class="text-sm font-medium text-[#8a97a6] hover:text-white transition-colors">explore</a>
+        <a href="/lists" class="text-sm font-medium text-[#8a97a6] hover:text-white transition-colors">lists</a>
+        
+        <!-- Profile Link tied to active user -->
+        <a :href="'/profile/' + $store.auth.user" 
+           class="text-sm font-medium text-[#8a97a6] hover:text-white transition-colors flex items-center gap-1">
+          <span>passport</span>
+        </a>
+
+        <!-- + Log Button -->
+        <button 
+          @click="openLogModal()" 
+          id="btn-log-visit"
+          class="bg-[#ff8a3d] hover:bg-[#ff8a3d]/90 text-black font-semibold text-xs sm:text-sm px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full transition-all transform active:scale-95 shadow-lg shadow-[#ff8a3d]/20 flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path>
+          </svg>
+          <span>+ log</span>
+        </button>
+
+        <!-- User Switcher Dropdown (Demo Feature) -->
+        <div class="relative" x-data="{ userMenu: false }">
+          <button @click="userMenu = !userMenu" 
+                  class="flex items-center gap-2 p-1 rounded-full border border-white/10 hover:border-white/30 transition-all bg-[#171e26]">
+            <div class="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs text-black"
+                 :style="'background-color: ' + ($store.auth.users.find(u => u.username === $store.auth.user)?.accent || '#ff8a3d')">
+              <span x-text="$store.auth.user.charAt(0).toUpperCase()"></span>
+            </div>
+            <svg class="w-3.5 h-3.5 text-[#8a97a6] pr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </button>
+
+          <!-- Dropdown -->
+          <div x-show="userMenu" 
+               @click.away="userMenu = false"
+               x-transition 
+               class="absolute right-0 top-11 w-48 bg-[#171e26] border border-white/10 rounded-xl shadow-2xl p-2 z-50">
+            <div class="px-3 py-1.5 text-xs text-[#8a97a6] font-mono border-b border-white/5">
+              switch traveler:
+            </div>
+            <template x-for="u in $store.auth.users" :key="u.username">
+              <button 
+                @click="$store.auth.switchUser(u.username); userMenu = false" 
+                class="w-full flex items-center justify-between px-3 py-2 text-xs rounded-lg hover:bg-[#1f2832] transition-colors"
+                :class="$store.auth.user === u.username ? 'text-[#ff8a3d] font-bold' : 'text-[#e8edf2]'">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full" :style="'background-color: ' + u.accent"></span>
+                  <span x-text="u.name"></span>
+                </div>
+                <span x-show="$store.auth.user === u.username" class="text-xs">✓</span>
+              </button>
+            </template>
+            <div class="mt-1 pt-1 border-t border-white/5">
+              <a :href="'/profile/' + $store.auth.user" class="block px-3 py-1.5 text-xs text-[#40bcf4] hover:underline">
+                view profile →
+              </a>
+            </div>
+          </div>
+        </div>
+
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Body Content -->
+  <main class="flex-1">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Global Log Visit Modal (Alpine.js) -->
+  <div x-show="$store.logModal.isOpen" 
+       x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       @keydown.escape.window="if(!$store.logModal.isSubmitting) $store.logModal.close()">
+    
+    <div class="bg-[#171e26] border border-white/10 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative overflow-hidden"
+         @click.away="if(!$store.logModal.isSubmitting) $store.logModal.close()">
+      
+      <!-- Success Stamp Thump overlay -->
+      <template x-if="$store.logModal.successStamp">
+        <div class="flex flex-col items-center justify-center py-8 text-center animate-stamp">
+          <div class="stamp-badge p-5 mb-4 border-4">
+            <span class="text-xs font-mono tracking-widest text-[#8a97a6]" x-text="$store.logModal.successStamp.country_code || 'PASSPORT'"></span>
+            <span class="text-2xl font-display font-black text-[#ff8a3d] tracking-wider my-1" x-text="$store.logModal.successStamp.name"></span>
+            <span class="text-xs font-mono text-[#00e054]" x-text="'★ ' + $store.logModal.successStamp.rating + '  •  ' + $store.logModal.successStamp.date"></span>
+          </div>
+          <h3 class="font-display font-bold text-xl text-white">stamped into your passport!</h3>
+          <p class="text-xs text-[#8a97a6] mt-1">Visit logged to your travel diary.</p>
+          <button @click="$store.logModal.close()" 
+                  class="mt-6 px-6 py-2 bg-[#1f2832] hover:bg-white/10 text-white rounded-full text-xs font-mono font-medium transition-colors">
+            done
+          </button>
+        </div>
+      </template>
+
+      <!-- Logging Form -->
+      <div x-show="!$store.logModal.successStamp">
+        <div class="flex items-center justify-between pb-4 border-b border-white/5">
+          <div>
+            <span class="text-xs font-mono text-[#ff8a3d] uppercase tracking-wider">01 log destination</span>
+            <h2 class="font-display font-bold text-xl text-white" 
+                x-text="$store.logModal.name ? 'log visit to ' + $store.logModal.name.toLowerCase() : 'log a destination'"></h2>
+          </div>
+          <button @click="$store.logModal.close()" class="text-[#8a97a6] hover:text-white p-1">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+
+        <form @submit.prevent="$store.logModal.submit()" class="space-y-4 mt-4">
+          
+          <!-- Destination Selector if empty -->
+          <div x-show="!$store.logModal.slug">
+            <label class="block text-xs font-mono text-[#8a97a6] mb-1">destination</label>
+            <input 
+              type="text" 
+              placeholder="Start typing destination name (e.g. Munnar, Tokyo)..."
+              class="w-full bg-[#0e1318] border border-white/10 rounded-lg p-2.5 text-sm text-white focus:border-[#ff8a3d] focus:outline-none"
+              @input.debounce.300ms="
+                fetch('/api/destinations?q=' + encodeURIComponent($el.value))
+                  .then(r => r.json())
+                  .then(d => {
+                    if (d.length > 0) {
+                      $store.logModal.slug = d[0].slug;
+                      $store.logModal.name = d[0].name;
+                    }
+                  })
+              "
+            >
+          </div>
+
+          <!-- Date & Rating Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-mono text-[#8a97a6] mb-1">date visited</label>
+              <input 
+                type="date" 
+                x-model="$store.logModal.date"
+                required
+                class="w-full bg-[#0e1318] border border-white/10 rounded-lg p-2.5 text-sm text-white focus:border-[#ff8a3d] focus:outline-none"
+              >
+            </div>
+
+            <!-- Half-Star Rating (0.5 to 5.0) -->
+            <div>
+              <label class="block text-xs font-mono text-[#8a97a6] mb-1 flex justify-between">
+                <span>rating</span>
+                <span class="text-[#00e054] font-bold" x-text="$store.logModal.rating + ' ★'"></span>
+              </label>
+              <div class="flex items-center gap-1.5 py-1">
+                <input 
+                  type="range" 
+                  min="0.5" 
+                  max="5.0" 
+                  step="0.5" 
+                  x-model.number="$store.logModal.rating"
+                  class="w-full accent-[#00e054] bg-[#0e1318] h-2 rounded-lg cursor-pointer"
+                >
+              </div>
+            </div>
+          </div>
+
+          <!-- Vibe Tags Chips -->
+          <div>
+            <label class="block text-xs font-mono text-[#8a97a6] mb-1.5">vibe tags</label>
+            <div class="flex flex-wrap gap-1.5">
+              <template x-for="t in $store.logModal.availableTags" :key="t">
+                <button 
+                  type="button"
+                  @click="$store.logModal.toggleTag(t)"
+                  class="text-xs px-2.5 py-1 rounded-full border transition-all"
+                  :class="$store.logModal.tags.includes(t) 
+                    ? 'bg-[#ff8a3d]/20 border-[#ff8a3d] text-[#ff8a3d] font-medium' 
+                    : 'bg-[#0e1318] border-white/10 text-[#8a97a6] hover:border-white/25'">
+                  <span x-text="'#' + t"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- Review Textarea -->
+          <div>
+            <label class="block text-xs font-mono text-[#8a97a6] mb-1">short review</label>
+            <textarea 
+              x-model="$store.logModal.review"
+              rows="3"
+              placeholder="What made this place unforgettable? The mist, the food, the people..."
+              class="w-full bg-[#0e1318] border border-white/10 rounded-lg p-2.5 text-sm text-white placeholder-[#8a97a6]/50 focus:border-[#ff8a3d] focus:outline-none resize-none"
+            ></textarea>
+          </div>
+
+          <!-- Would Return Toggle -->
+          <div class="flex items-center justify-between py-1">
+            <span class="text-xs text-[#e8edf2]">would return again?</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" x-model="$store.logModal.wouldReturn" class="sr-only peer">
+              <div class="w-10 h-5 bg-[#0e1318] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#00e054]"></div>
+            </label>
+          </div>
+
+          <!-- Submit Button -->
+          <button 
+            type="submit" 
+            :disabled="$store.logModal.isSubmitting"
+            class="w-full py-3 bg-[#ff8a3d] hover:bg-[#ff8a3d]/90 text-black font-display font-bold text-sm rounded-xl transition-all shadow-lg shadow-[#ff8a3d]/20 flex items-center justify-center gap-2">
+            <span x-show="!$store.logModal.isSubmitting">stamp destination →</span>
+            <span x-show="$store.logModal.isSubmitting" class="animate-pulse">stamping passport...</span>
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Global Toast Notification -->
+  <div x-show="$store.toast.show" 
+       x-cloak
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 translate-y-3"
+       x-transition:enter-end="opacity-100 translate-y-0"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 translate-y-0"
+       x-transition:leave-end="opacity-0 translate-y-3"
+       class="fixed bottom-6 right-6 z-50 max-w-sm bg-[#171e26] border border-white/10 rounded-xl px-4 py-3 shadow-2xl flex items-center gap-3">
+    <div class="w-2.5 h-2.5 rounded-full" 
+         :class="$store.toast.type === 'error' ? 'bg-red-500' : 'bg-[#00e054]'"></div>
+    <span class="text-xs sm:text-sm font-medium text-white" x-text="$store.toast.message"></span>
+  </div>
+
+  <!-- Footer with Gingham Accent Strip -->
+  <footer class="mt-auto border-t border-white/5 bg-[#0e1318]">
+    <div class="gingham-strip"></div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#8a97a6]">
+      <div class="flex items-center gap-3">
+        <span class="font-display font-bold text-white">stampd</span>
+        <span>•</span>
+        <span>built for LAYOVER 2026 hackathon</span>
+      </div>
+      <div class="flex items-center gap-4 font-mono">
+        <span>Letterboxd for travelers</span>
+        <a href="/api/health" class="hover:text-white transition-colors">api</a>
+        <a href="/docs" class="hover:text-white transition-colors">docs</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Explore Destinations — Stampd{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8"
+     x-data="{
+       searchQuery: '{{ selected_query or '' }}',
+       selectedContinent: '{{ selected_continent or '' }}',
+       selectedTag: '{{ selected_tag or '' }}',
+       selectedSort: '{{ selected_sort or 'popular' }}',
+       destinations: [],
+       loading: true,
+
+       async fetchDestinations() {
+         this.loading = true;
+         const params = new URLSearchParams();
+         if (this.searchQuery) params.append('q', this.searchQuery);
+         if (this.selectedContinent) params.append('continent', this.selectedContinent);
+         if (this.selectedTag) params.append('tag', this.selectedTag);
+         if (this.selectedSort) params.append('sort', this.selectedSort);
+
+         try {
+           const res = await fetch('/api/destinations?' + params.toString());
+           this.destinations = await res.json();
+         } catch (e) {
+           console.error(e);
+         } finally {
+           this.loading = false;
+         }
+       },
+
+       init() {
+         this.fetchDestinations();
+       }
+     }">
+
+  <!-- Header -->
+  <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-white/5">
+    <div>
+      <div class="flex items-center gap-2 mb-1">
+        <span class="font-mono text-xs text-[#ff8a3d] font-bold">DIRECTORY</span>
+        <span class="text-xs text-[#8a97a6]">• 40 curated destinations</span>
+      </div>
+      <h1 class="font-display font-black text-3xl sm:text-4xl text-white tracking-tight">explore spots</h1>
+    </div>
+
+    <!-- Sort Dropdown + Add Spot -->
+    <div class="flex items-center gap-3 flex-wrap">
+      <a href="/add-destination"
+         class="flex items-center gap-1.5 px-3 py-2 bg-[#1f2832] hover:bg-white/10 text-[#00e054] text-xs font-mono rounded-xl border border-white/10 transition-all">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path>
+        </svg>
+        add spot
+      </a>
+      <span class="text-xs font-mono text-[#8a97a6]">sort:</span>
+      <select 
+        x-model="selectedSort" 
+        @change="fetchDestinations()"
+        class="bg-[#171e26] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#ff8a3d]">
+        <option value="popular">most logged</option>
+        <option value="rating">highest rated</option>
+        <option value="new">newly added</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Search & Filter Controls -->
+  <div class="space-y-4 bg-[#171e26] border border-white/5 rounded-2xl p-5">
+    
+    <!-- Search Bar -->
+    <div class="relative">
+      <input 
+        type="text" 
+        placeholder="Filter by destination name or country (e.g. Munnar, Iceland, Japan)..."
+        x-model="searchQuery"
+        @input.debounce.300ms="fetchDestinations()"
+        class="w-full bg-[#0e1318] border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-[#8a97a6] focus:outline-none focus:border-[#ff8a3d]"
+      >
+      <svg class="w-4 h-4 text-[#8a97a6] absolute left-3.5 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+      </svg>
+    </div>
+
+    <!-- Continents row -->
+    <div class="flex flex-wrap items-center gap-1.5 pt-1">
+      <span class="text-xs font-mono text-[#8a97a6] mr-2">continent:</span>
+      <button 
+        @click="selectedContinent = ''; fetchDestinations()"
+        class="px-3 py-1 rounded-full text-xs font-mono transition-colors"
+        :class="selectedContinent === '' ? 'bg-[#ff8a3d] text-black font-bold' : 'bg-[#0e1318] text-[#8a97a6] hover:text-white border border-white/5'">
+        all
+      </button>
+      {% for cont in ['Asia', 'Europe', 'Americas', 'Africa', 'Oceania'] %}
+      <button 
+        @click="selectedContinent = '{{ cont }}'; fetchDestinations()"
+        class="px-3 py-1 rounded-full text-xs font-mono transition-colors"
+        :class="selectedContinent === '{{ cont }}' ? 'bg-[#ff8a3d] text-black font-bold' : 'bg-[#0e1318] text-[#8a97a6] hover:text-white border border-white/5'">
+        {{ cont|lower }}
+      </button>
+      {% endfor %}
+    </div>
+
+    <!-- Vibe Tags row -->
+    <div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-white/5">
+      <span class="text-xs font-mono text-[#8a97a6] mr-2">vibe:</span>
+      <button 
+        @click="selectedTag = ''; fetchDestinations()"
+        class="px-2.5 py-0.5 rounded-full text-xs font-mono transition-colors"
+        :class="selectedTag === '' ? 'bg-[#40bcf4] text-black font-bold' : 'bg-[#0e1318] text-[#8a97a6] hover:text-white border border-white/5'">
+        all vibes
+      </button>
+      {% for t in ['mountains', 'beaches', 'city', 'food', 'heritage', 'nature', 'nightlife', 'adventure', 'spiritual', 'offbeat'] %}
+      <button 
+        @click="selectedTag = selectedTag === '{{ t }}' ? '' : '{{ t }}'; fetchDestinations()"
+        class="px-2.5 py-0.5 rounded-full text-xs font-mono transition-colors"
+        :class="selectedTag === '{{ t }}' ? 'bg-[#40bcf4] text-black font-bold' : 'bg-[#0e1318] text-[#8a97a6] hover:text-white border border-white/5'">
+        #{{ t }}
+      </button>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  <!-- Loading State -->
+  <div x-show="loading" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+    <template x-for="i in 12" :key="i">
+      <div class="aspect-[2/3] bg-[#171e26] rounded-xl animate-pulse border border-white/5"></div>
+    </template>
+  </div>
+
+  <!-- Results Poster Grid -->
+  <div x-show="!loading && destinations.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+    <template x-for="dest in destinations" :key="dest.slug">
+      <div class="poster-card group" 
+           :style="'background: linear-gradient(145deg, ' + dest.poster_from + ', ' + dest.poster_to + ')'">
+        
+        <!-- Top Poster Metadata -->
+        <div class="flex items-start justify-between">
+          <span class="text-[10px] font-mono tracking-widest text-white/70 uppercase px-1.5 py-0.5 rounded bg-black/30 backdrop-blur-sm"
+                x-text="dest.country_code"></span>
+          
+          <div x-show="dest.avg_rating > 0" class="flex items-center gap-0.5 text-xs text-[#00e054] font-mono font-bold bg-black/40 px-1.5 py-0.5 rounded backdrop-blur-sm">
+            <span>★</span>
+            <span x-text="dest.avg_rating"></span>
+          </div>
+        </div>
+
+        <!-- Destination Title Typography -->
+        <div class="mt-auto">
+          <h3 class="font-display font-bold text-lg text-white leading-tight drop-shadow-md" x-text="dest.name"></h3>
+          <p class="text-[11px] text-white/70 font-mono drop-shadow" x-text="dest.country"></p>
+        </div>
+
+        <!-- Hover Overlay -->
+        <div class="poster-overlay">
+          <a :href="'/destinations/' + dest.slug" class="w-full text-center py-1.5 bg-white text-black text-xs font-display font-bold rounded-lg hover:bg-white/90 transition-all">
+            view details
+          </a>
+          <button 
+            type="button"
+            @click="openLogModal(dest.slug, dest.name, dest.country)"
+            class="w-full py-1.5 bg-[#ff8a3d] text-black text-xs font-display font-bold rounded-lg hover:bg-[#ff8a3d]/90 transition-all shadow-md">
+            + log visit
+          </button>
+          <button 
+            type="button"
+            @click="toggleBucket(dest.slug, $el)"
+            class="w-full py-1.5 bg-[#171e26] hover:bg-[#1f2832] text-xs font-mono text-[#e8edf2] rounded-lg transition-all border border-white/10">
+            📌 bucket list
+          </button>
+        </div>
+
+      </div>
+    </template>
+  </div>
+
+  <!-- Empty State -->
+  <div x-show="!loading && destinations.length === 0" class="bg-[#171e26] border border-white/5 rounded-2xl p-16 text-center space-y-3">
+    <div class="text-3xl">🧭</div>
+    <h3 class="font-display font-bold text-lg text-white">no destinations found</h3>
+    <p class="text-xs text-[#8a97a6] max-w-sm mx-auto">
+      No spots matched your current search and filters. Try clearing tags or continent filters.
+    </p>
+    <button 
+      @click="searchQuery = ''; selectedContinent = ''; selectedTag = ''; fetchDestinations()"
+      class="px-4 py-2 bg-[#1f2832] hover:bg-white/10 text-white font-mono text-xs rounded-full transition-colors">
+      reset all filters
+    </button>
+  </div>
+
+</div>
+{% endblock %}

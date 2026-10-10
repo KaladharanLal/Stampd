@@ -1,0 +1,834 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile_user.display_name }} (@{{ profile_user.username }}) — Stampd Passport{% endblock %}
+
+{% block content %}
+<div class="space-y-16 pb-24"
+     x-data="{
+       activeTab: 'map',
+       heatPoints: {{ stats.heat_points | tojson }},
+       stamps: {{ stats.stamps | tojson }},
+       visits: {{ visits | tojson }},
+       homeLat: {{ profile_user.home_lat or 0 }},
+       homeLng: {{ profile_user.home_lng or 0 }},
+       isFollowing: {{ 'true' if profile_user.is_following else 'false' }},
+       followersCount: {{ profile_user.followers_count }},
+       isSubmittingFollow: false,
+       mapView: 'all', // 'all', 'heat', 'pins'
+
+       // Animated Counter State
+       counters: {
+         countries: 0,
+         continents: 0,
+         destinations: 0,
+         km: 0,
+         worldPct: 0
+       },
+
+       async toggleFollow() {
+         const currentUser = Alpine.store('auth').user;
+         if (currentUser === '{{ profile_user.username }}') {
+           window.showToast('You cannot follow your own passport!', 'error');
+           return;
+         }
+         this.isSubmittingFollow = true;
+         try {
+           const res = await fetch('/api/follow/{{ profile_user.username }}?follower_username=' + currentUser, {
+             method: 'POST'
+           });
+           const data = await res.json();
+           this.isFollowing = data.following;
+           this.followersCount = data.follower_count;
+           window.showToast(data.following ? 'Following @{{ profile_user.username }}! 🧭' : 'Unfollowed @{{ profile_user.username }}', 'success');
+         } catch(e) {
+           console.error(e);
+           window.showToast('Could not update follow status', 'error');
+         } finally {
+           this.isSubmittingFollow = false;
+         }
+       },
+
+       animateNumbers() {
+         const targetCountries = {{ stats.countries_visited }};
+         const targetContinents = {{ stats.continents_visited }};
+         const targetDestinations = {{ stats.total_visits }};
+         const targetKm = {{ stats.total_km }};
+         const targetPct = {{ stats.world_percentage }};
+
+         const duration = 1200;
+         const steps = 40;
+         const stepTime = duration / steps;
+         let currentStep = 0;
+
+         const timer = setInterval(() => {
+           currentStep++;
+           const progress = Math.min(currentStep / steps, 1);
+           const ease = 1 - Math.pow(1 - progress, 3);
+
+           this.counters.countries = Math.round(targetCountries * ease);
+           this.counters.continents = Math.round(targetContinents * ease);
+           this.counters.destinations = Math.round(targetDestinations * ease);
+           this.counters.km = Math.round(targetKm * ease);
+           this.counters.worldPct = (targetPct * ease).toFixed(1);
+
+           if (currentStep >= steps) {
+             clearInterval(timer);
+             this.counters.countries = targetCountries;
+             this.counters.continents = targetContinents;
+             this.counters.destinations = targetDestinations;
+             this.counters.km = targetKm;
+             this.counters.worldPct = targetPct.toFixed(1);
+           }
+         }, stepTime);
+       },
+
+       init() {
+         this.animateNumbers();
+       }
+     }">
+
+  <!-- =========================================================================
+       Profile Header Banner
+       ========================================================================= -->
+  <section class="relative pt-12 pb-8 border-b border-white/5 bg-gradient-to-b from-[#171e26]/60 to-transparent">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <!-- Quick Demo Switcher Strip -->
+      <div class="flex items-center justify-between pb-6 mb-8 border-b border-white/5 text-xs font-mono">
+        <div class="flex items-center gap-2 text-[#8a97a6]">
+          <span class="w-2 h-2 rounded-full bg-[#00e054]"></span>
+          <span>demo passport:</span>
+          <span class="text-white font-bold">@{{ profile_user.username }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-[#8a97a6] hidden sm:inline">switch passport view:</span>
+          {% for u in all_users %}
+          <a href="/profile/{{ u.username }}" 
+             class="px-2.5 py-1 rounded-full border transition-all text-[11px]"
+             :class="'{{ profile_user.username }}' === '{{ u.username }}' 
+               ? 'bg-white/10 border-[#ff8a3d] text-white font-bold' 
+               : 'bg-[#171e26] border-white/5 text-[#8a97a6] hover:text-white'">
+            {{ u.display_name.split(' ')[0] }}
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Identity Grid -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        
+        <div class="flex items-start sm:items-center gap-5 sm:gap-6">
+          <!-- Big Glowing Avatar -->
+          <div class="relative group">
+            <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl flex items-center justify-center font-display font-black text-3xl sm:text-4xl text-black shadow-2xl transition-transform group-hover:scale-105"
+                 style="background: linear-gradient(135deg, {{ profile_user.accent }}, #ffffff);">
+              {{ profile_user.display_name[:1] }}
+            </div>
+            <!-- Online / Passport Active Badge -->
+            <span class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#0e1318] flex items-center justify-center">
+              <span class="w-3.5 h-3.5 rounded-full bg-[#00e054] border-2 border-[#0e1318]"></span>
+            </span>
+          </div>
+
+          <!-- Name & Bio Details -->
+          <div class="space-y-1.5">
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h1 class="text-2xl sm:text-4xl font-display font-black text-white tracking-tight">
+                {{ profile_user.display_name }}
+              </h1>
+              <span class="px-2.5 py-0.5 rounded-full bg-[#1f2832] border border-white/10 text-xs font-mono text-[#8a97a6]">
+                @{{ profile_user.username }}
+              </span>
+            </div>
+
+            <div class="flex items-center gap-2 text-xs font-mono text-[#8a97a6]">
+              <span>📍 {{ profile_user.home_city or 'World Traveler' }}</span>
+              <span>•</span>
+              <span class="text-[#ff8a3d] font-semibold">{{ stats.travel_dna_title }}</span>
+            </div>
+
+            {% if profile_user.bio %}
+            <p class="text-sm text-[#e8edf2]/80 max-w-xl font-sans pt-1">
+              "{{ profile_user.bio }}"
+            </p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Follow & Share Action Buttons -->
+        <div class="flex items-center gap-3 pt-2 md:pt-0">
+          <!-- Follow / Following Button -->
+          <template x-if="$store.auth.user !== '{{ profile_user.username }}'">
+            <button 
+              @click="toggleFollow()"
+              :disabled="isSubmittingFollow"
+              id="btn-follow-user"
+              class="px-5 py-2.5 rounded-xl font-display font-bold text-xs sm:text-sm transition-all shadow-lg flex items-center gap-2"
+              :class="isFollowing 
+                ? 'bg-[#1f2832] text-white hover:bg-white/10 border border-white/10' 
+                : 'bg-[#ff8a3d] text-black hover:bg-[#ff8a3d]/90 shadow-[#ff8a3d]/20'">
+              <span x-show="!isFollowing">+ follow traveler</span>
+              <span x-show="isFollowing">following ✓</span>
+            </button>
+          </template>
+
+          <button 
+            type="button"
+            onclick="navigator.clipboard.writeText(window.location.href); showToast('Passport link copied to clipboard! 📋');"
+            class="px-4 py-2.5 bg-[#171e26] hover:bg-[#1f2832] text-xs font-mono text-white rounded-xl border border-white/10 transition-colors flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-[#8a97a6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+            </svg>
+            <span>share passport</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Follower stats pill strip -->
+      <div class="mt-6 pt-4 border-t border-white/5 flex items-center gap-6 text-xs font-mono text-[#8a97a6]">
+        <div>
+          <span class="text-white font-bold" x-text="followersCount"></span> followers
+        </div>
+        <div>
+          <span class="text-white font-bold">{{ profile_user.following_count }}</span> following
+        </div>
+        <div>
+          <span class="text-white font-bold">{{ profile_user.bucket_count }}</span> bucket items
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- =========================================================================
+       Stats Row with Animated Count-Up
+       ========================================================================= -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+      
+      <!-- 01 Countries Visited -->
+      <div class="bg-[#171e26] border border-white/5 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-white/10 transition-colors">
+        <span class="text-[11px] font-mono text-[#8a97a6] uppercase tracking-wider">countries</span>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span class="text-3xl sm:text-4xl font-display font-black text-white" x-text="counters.countries"></span>
+          <span class="text-xs font-mono text-[#8a97a6]">/ 195</span>
+        </div>
+        <div class="mt-3 w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+          <div class="bg-[#ff8a3d] h-full rounded-full transition-all duration-1000"
+               :style="'width: ' + counters.worldPct + '%'"></div>
+        </div>
+      </div>
+
+      <!-- 02 Continents -->
+      <div class="bg-[#171e26] border border-white/5 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-white/10 transition-colors">
+        <span class="text-[11px] font-mono text-[#8a97a6] uppercase tracking-wider">continents</span>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span class="text-3xl sm:text-4xl font-display font-black text-[#40bcf4]" x-text="counters.continents"></span>
+          <span class="text-xs font-mono text-[#8a97a6]">/ 7</span>
+        </div>
+        <span class="text-[11px] font-mono text-[#8a97a6] mt-3 truncate">
+          {{ stats.continents_list | join(', ') }}
+        </span>
+      </div>
+
+      <!-- 03 Destinations Stamped -->
+      <div class="bg-[#171e26] border border-white/5 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-white/10 transition-colors">
+        <span class="text-[11px] font-mono text-[#8a97a6] uppercase tracking-wider">stamped spots</span>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span class="text-3xl sm:text-4xl font-display font-black text-[#00e054]" x-text="counters.destinations"></span>
+          <span class="text-xs font-mono text-[#00e054]">logs</span>
+        </div>
+        <span class="text-[11px] font-mono text-[#8a97a6] mt-3">
+          100% verified visits
+        </span>
+      </div>
+
+      <!-- 04 Km Travelled -->
+      <div class="bg-[#171e26] border border-white/5 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-white/10 transition-colors">
+        <span class="text-[11px] font-mono text-[#8a97a6] uppercase tracking-wider">km travelled</span>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span class="text-3xl sm:text-4xl font-display font-black text-white" x-text="counters.km.toLocaleString()"></span>
+          <span class="text-xs font-mono text-[#8a97a6]">km</span>
+        </div>
+        <span class="text-[11px] font-mono text-[#8a97a6] mt-3">
+          great-circle haversine
+        </span>
+      </div>
+
+      <!-- 05 World Progress -->
+      <div class="bg-[#171e26] border border-white/5 rounded-2xl p-4 sm:p-5 flex flex-col justify-between col-span-2 sm:col-span-1 hover:border-white/10 transition-colors">
+        <span class="text-[11px] font-mono text-[#ff8a3d] uppercase tracking-wider font-bold">% of the world</span>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span class="text-3xl sm:text-4xl font-display font-black text-[#ff8a3d]" x-text="counters.worldPct"></span>
+          <span class="text-xs font-mono text-[#ff8a3d]">%</span>
+        </div>
+        <span class="text-[11px] font-mono text-[#8a97a6] mt-3">
+          195 sovereign nations
+        </span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- =========================================================================
+       SECTION 01: WHERE I'VE BEEN (Heat Map + Hotspots)
+       ========================================================================= -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 mb-4 pb-2 border-b border-white/5">
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-sm text-[#ff8a3d] font-bold">01</span>
+        <h2 class="font-display font-bold text-2xl text-white lowercase">where i've been</h2>
+        <span class="text-xs font-mono text-[#8a97a6] hidden sm:inline">• interactive heat map & hotspots</span>
+      </div>
+
+      <!-- Map View Toggles -->
+      <div class="flex items-center gap-2">
+        <button 
+          @click="mapView = 'all'; window.filterProfileMap('all')"
+          class="px-3 py-1 rounded-full text-xs font-mono transition-colors"
+          :class="mapView === 'all' ? 'bg-[#ff8a3d] text-black font-bold' : 'bg-[#171e26] text-[#8a97a6] hover:text-white border border-white/10'">
+          all layers
+        </button>
+        <button 
+          @click="mapView = 'heat'; window.filterProfileMap('heat')"
+          class="px-3 py-1 rounded-full text-xs font-mono transition-colors"
+          :class="mapView === 'heat' ? 'bg-[#ff8a3d] text-black font-bold' : 'bg-[#171e26] text-[#8a97a6] hover:text-white border border-white/10'">
+          hotspots only
+        </button>
+        <button 
+          @click="mapView = 'pins'; window.filterProfileMap('pins')"
+          class="px-3 py-1 rounded-full text-xs font-mono transition-colors"
+          :class="mapView === 'pins' ? 'bg-[#ff8a3d] text-black font-bold' : 'bg-[#171e26] text-[#8a97a6] hover:text-white border border-white/10'">
+          pins only
+        </button>
+        <button 
+          onclick="window.resetProfileMap()" 
+          title="Reset View"
+          class="p-1.5 rounded-full bg-[#171e26] text-[#8a97a6] hover:text-white border border-white/10 transition-colors">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Map Canvas Container -->
+    <div class="relative w-full h-[460px] sm:h-[520px] rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-[#0e1318]">
+      <div id="profile-heat-map" class="w-full h-full z-10"></div>
+      
+      <!-- Map Legend Overlay -->
+      <div class="absolute bottom-4 left-4 z-20 bg-[#171e26]/90 backdrop-blur-md border border-white/10 rounded-xl px-3.5 py-2.5 text-[11px] font-mono text-[#8a97a6] flex items-center gap-3 shadow-xl">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#ff8a3d] animate-pulse"></span>
+          <span class="text-white font-medium">home: {{ profile_user.home_city or 'Base' }}</span>
+        </div>
+        <span>•</span>
+        <div class="flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-[#00e054]"></span>
+          <span>visited spot</span>
+        </div>
+        <span>•</span>
+        <div class="flex items-center gap-1">
+          <span class="w-12 h-2 rounded bg-gradient-to-r from-[#40bcf4] via-[#00e054] to-[#ff3366]"></span>
+          <span>heat density</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================================
+       SECTION 02: MY PASSPORT (Authentic SVG Stamps Collection)
+       ========================================================================= -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-baseline justify-between mb-4 pb-2 border-b border-white/5">
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-sm text-[#ff8a3d] font-bold">02</span>
+        <h2 class="font-display font-bold text-2xl text-white lowercase">my passport stamps</h2>
+        <span class="text-xs font-mono text-[#8a97a6] hidden sm:inline">• {{ stats.stamps | length }} official entries</span>
+      </div>
+      <span class="text-xs font-mono text-[#8a97a6]">
+        hover to inspect • click to view destination
+      </span>
+    </div>
+
+    <!-- Passport Document Paper Texture Canvas -->
+    <div class="passport-paper p-6 sm:p-8">
+      {% if stats.stamps %}
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5 sm:gap-6">
+        {% for stamp in stats.stamps %}
+        {% set rot = ([-4, 3, -6, 2, 5, -3, 4, -2][loop.index0 % 8]) %}
+        {% set ink = (['orange', 'blue', 'green', 'rose'][loop.index0 % 4]) %}
+        {% set shape = (loop.index0 % 3) %}
+
+        <a href="/destinations/{{ stamp.slug }}" 
+           class="passport-stamp-item group block"
+           style="transform: rotate({{ rot }}deg);">
+          
+          <!-- Stamp Variant 0: Vintage Circular Seal -->
+          {% if shape == 0 %}
+          <div class="aspect-square rounded-full border-2 border-dashed flex flex-col items-center justify-center p-3 text-center transition-all bg-[#171e26]/40 backdrop-blur-sm"
+               style="border-color: {% if ink == 'orange' %}rgba(255,138,61,0.8){% elif ink == 'blue' %}rgba(64,188,244,0.8){% elif ink == 'green' %}rgba(0,224,84,0.8){% else %}rgba(244,63,94,0.8){% endif %};
+                      color: {% if ink == 'orange' %}#ff8a3d{% elif ink == 'blue' %}#40bcf4{% elif ink == 'green' %}#00e054{% else %}#f43f5e{% endif %};">
+            
+            <div class="w-full border-b border-current pb-0.5 text-[9px] font-mono font-bold tracking-widest uppercase">
+              IMMIGRATION • {{ stamp.country_code }}
+            </div>
+            
+            <div class="my-auto py-1">
+              <div class="font-display font-black text-sm sm:text-base leading-tight uppercase tracking-wider group-hover:scale-105 transition-transform">
+                {{ stamp.name }}
+              </div>
+              <div class="text-[10px] font-mono tracking-wider opacity-80 mt-0.5">
+                ★ {{ stamp.rating }}
+              </div>
+            </div>
+
+            <div class="w-full border-t border-current pt-0.5 text-[9px] font-mono tracking-widest uppercase">
+              {{ stamp.date }}
+            </div>
+          </div>
+
+          <!-- Stamp Variant 1: Double-Border Rectangular Visa -->
+          {% elif shape == 1 %}
+          <div class="aspect-[4/3] rounded-lg border-2 p-3 flex flex-col justify-between text-center transition-all bg-[#171e26]/40 backdrop-blur-sm relative"
+               style="border-color: {% if ink == 'orange' %}rgba(255,138,61,0.8){% elif ink == 'blue' %}rgba(64,188,244,0.8){% elif ink == 'green' %}rgba(0,224,84,0.8){% else %}rgba(244,63,94,0.8){% endif %};
+                      color: {% if ink == 'orange' %}#ff8a3d{% elif ink == 'blue' %}#40bcf4{% elif ink == 'green' %}#00e054{% else %}#f43f5e{% endif %};">
+            
+            <!-- Corner notches -->
+            <div class="flex items-center justify-between text-[9px] font-mono tracking-wider border-b border-current pb-1">
+              <span>ENTRY PERMIT</span>
+              <span class="font-bold">{{ stamp.country_code }}</span>
+            </div>
+
+            <div class="py-1">
+              <div class="font-display font-black text-sm sm:text-base tracking-wide uppercase leading-tight group-hover:scale-105 transition-transform">
+                {{ stamp.name }}
+              </div>
+              <div class="text-[10px] font-mono opacity-80 mt-0.5">
+                {{ stamp.country }}
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-[9px] font-mono border-t border-current pt-1">
+              <span>{{ stamp.date }}</span>
+              <span class="font-bold">★ {{ stamp.rating }}</span>
+            </div>
+          </div>
+
+          <!-- Stamp Variant 2: Octagonal / Angled Cut Border -->
+          {% else %}
+          <div class="aspect-[4/3] rounded-xl border-2 border-double p-3 flex flex-col justify-between text-center transition-all bg-[#171e26]/40 backdrop-blur-sm"
+               style="border-color: {% if ink == 'orange' %}rgba(255,138,61,0.8){% elif ink == 'blue' %}rgba(64,188,244,0.8){% elif ink == 'green' %}rgba(0,224,84,0.8){% else %}rgba(244,63,94,0.8){% endif %};
+                      color: {% if ink == 'orange' %}#ff8a3d{% elif ink == 'blue' %}#40bcf4{% elif ink == 'green' %}#00e054{% else %}#f43f5e{% endif %};">
+            
+            <div class="text-[9px] font-mono tracking-widest uppercase">
+              DEPARTURE • CHECKED
+            </div>
+
+            <div class="py-1">
+              <div class="font-display font-black text-sm sm:text-base uppercase tracking-wider group-hover:scale-105 transition-transform">
+                {{ stamp.name }}
+              </div>
+              <div class="text-[10px] font-mono opacity-80">
+                PASSED ★ {{ stamp.rating }}
+              </div>
+            </div>
+
+            <div class="text-[9px] font-mono font-bold tracking-widest uppercase">
+              {{ stamp.date }} • {{ stamp.country_code }}
+            </div>
+          </div>
+          {% endif %}
+
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="py-16 text-center text-[#8a97a6] space-y-2">
+        <p class="font-display font-bold text-lg text-white">no passport stamps yet</p>
+        <p class="text-xs font-mono">Log your first destination to stamp your passport!</p>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- =========================================================================
+       SECTION 03: TRAVEL DNA
+       ========================================================================= -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-baseline justify-between mb-4 pb-2 border-b border-white/5">
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-sm text-[#ff8a3d] font-bold">03</span>
+        <h2 class="font-display font-bold text-2xl text-white lowercase">travel dna</h2>
+        <span class="text-xs font-mono text-[#8a97a6] hidden sm:inline">• personality computed from destination vibes</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Archetype Persona Badge -->
+      <div class="bg-gradient-to-br from-[#171e26] to-[#1f2832] border border-white/10 rounded-2xl p-6 sm:p-8 flex flex-col justify-between shadow-xl relative overflow-hidden">
+        <div class="space-y-3 z-10">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#ff8a3d]/15 border border-[#ff8a3d]/30 text-xs font-mono text-[#ff8a3d]">
+            <span>🧬 TRAVEL ARCHETYPE</span>
+          </div>
+          <h3 class="font-display font-black text-3xl sm:text-4xl text-white tracking-tight leading-tight">
+            {{ stats.travel_dna_title }}
+          </h3>
+          <p class="text-sm text-[#8a97a6] leading-relaxed font-sans pt-1">
+            Based on {{ stats.total_visits }} recorded expeditions across {{ stats.countries_visited }} countries. You gravitate toward crisp highland air, scenic ghat roads, and authentic cultural immersion over tourist traps.
+          </p>
+        </div>
+
+        <div class="pt-6 border-t border-white/5 flex items-center justify-between z-10 text-xs font-mono text-[#8a97a6]">
+          <span>Confidence: <strong class="text-white">96%</strong></span>
+          <span>Profile: <strong class="text-[#00e054]">Active</strong></span>
+        </div>
+
+        <!-- Decorative background glow -->
+        <div class="absolute -right-8 -bottom-8 w-44 h-44 rounded-full bg-[#ff8a3d]/10 blur-3xl pointer-events-none"></div>
+      </div>
+
+      <!-- Horizontal Percentage Bars Breakdown -->
+      <div class="lg:col-span-2 bg-[#171e26] border border-white/5 rounded-2xl p-6 sm:p-8 space-y-5">
+        <div class="flex items-center justify-between pb-2 border-b border-white/5">
+          <span class="text-xs font-mono text-[#8a97a6] uppercase tracking-wider">vibe distribution</span>
+          <span class="text-xs font-mono text-[#8a97a6]">percentage of total logged tags</span>
+        </div>
+
+        <div class="space-y-4">
+          {% for tag, pct in stats.tag_percentages.items() %}
+          {% if loop.index <= 6 %}
+          {% set tag_color = '#ff8a3d' if tag == 'mountains' else ('#00e054' if tag == 'nature' else ('#40bcf4' if tag == 'beaches' else ('#f43f5e' if tag == 'food' else ('#eab308' if tag == 'heritage' else '#a855f7')))) %}
+          
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs font-mono">
+              <span class="text-white capitalize font-medium flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full" style="background-color: {{ tag_color }};"></span>
+                {{ tag }}
+              </span>
+              <span class="text-white font-bold">{{ pct }}%</span>
+            </div>
+            <div class="dna-bar-track">
+              <div class="dna-bar-fill" 
+                   style="width: {{ pct }}%; background: linear-gradient(90deg, {{ tag_color }}99, {{ tag_color }});">
+              </div>
+            </div>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- =========================================================================
+       SECTION 04: TRAVEL DIARY (Letterboxd-Style Logged Visits)
+       ========================================================================= -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-baseline justify-between mb-4 pb-2 border-b border-white/5">
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-sm text-[#ff8a3d] font-bold">04</span>
+        <h2 class="font-display font-bold text-2xl text-white lowercase">travel diary</h2>
+        <span class="text-xs font-mono text-[#8a97a6] hidden sm:inline">• {{ visits | length }} chronologically recorded visits</span>
+      </div>
+      <button 
+        type="button"
+        onclick="openLogModal()" 
+        class="text-xs font-mono text-[#ff8a3d] hover:underline">
+        + log new visit
+      </button>
+    </div>
+
+    {% if visits %}
+    <div class="space-y-3">
+      {% for v in visits %}
+      <div class="diary-entry-card bg-[#171e26] border border-white/5 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        
+        <div class="flex items-start sm:items-center gap-4">
+          <!-- Mini Poster Thumbnail -->
+          <a href="/destinations/{{ v.destination.slug }}" 
+             class="w-12 h-16 rounded-lg flex-shrink-0 flex items-center justify-center text-center p-1 font-mono font-bold text-xs text-white shadow-md hover:opacity-90 transition-opacity"
+             style="background: linear-gradient(135deg, {{ v.destination.poster_from }}, {{ v.destination.poster_to }});">
+            {{ v.destination.country_code }}
+          </a>
+
+          <!-- Details -->
+          <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <a href="/destinations/{{ v.destination.slug }}" class="font-display font-bold text-lg text-white hover:text-[#ff8a3d] transition-colors">
+                {{ v.destination.name }}
+              </a>
+              <span class="text-xs font-mono text-[#8a97a6]">
+                {{ v.destination.country }}
+              </span>
+              {% if v.would_return %}
+              <span class="px-2 py-0.5 rounded-full bg-[#00e054]/15 text-[#00e054] text-[10px] font-mono">
+                🔄 would return
+              </span>
+              {% endif %}
+            </div>
+
+            {% if v.review %}
+            <p class="text-xs text-[#e8edf2]/80 font-sans max-w-2xl line-clamp-2">
+              "{{ v.review }}"
+            </p>
+            {% endif %}
+
+            <!-- Tags -->
+            {% if v.tags %}
+            <div class="flex flex-wrap gap-1.5 pt-0.5">
+              {% for t in v.tags %}
+              <span class="text-[10px] font-mono text-[#8a97a6] bg-black/30 px-2 py-0.5 rounded">
+                #{{ t }}
+              </span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Rating & Date on Right -->
+        <div class="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto border-t sm:border-t-0 border-white/5 pt-2 sm:pt-0">
+          <div class="flex items-center gap-1 text-base text-[#00e054] font-mono font-bold">
+            <span>★</span>
+            <span>{{ v.rating }}</span>
+          </div>
+          <span class="text-xs font-mono text-[#8a97a6] mt-0.5">
+            {{ v.visited_on }}
+          </span>
+        </div>
+
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-[#171e26] border border-white/5 rounded-2xl p-12 text-center text-[#8a97a6] space-y-2">
+      <p class="font-display font-bold text-lg text-white">no travel diary entries</p>
+      <p class="text-xs font-mono">Destinations you log will be arranged by date in your diary.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- =========================================================================
+       SECTION 05: BUCKET LIST
+       ========================================================================= -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-baseline justify-between mb-6 pb-2 border-b border-white/5">
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-sm text-[#ff8a3d] font-bold">05</span>
+        <h2 class="font-display font-bold text-2xl text-white lowercase">bucket list</h2>
+        <span class="text-xs font-mono text-[#8a97a6] hidden sm:inline">• {{ bucket_list | length }} saved dream spots</span>
+      </div>
+      <a href="/explore" class="text-xs font-mono text-[#8a97a6] hover:text-[#40bcf4] transition-colors">
+        find more destinations →
+      </a>
+    </div>
+
+    {% if bucket_list %}
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+      {% for item in bucket_list %}
+      {% set dest = item.destination %}
+      <div class="poster-card group" 
+           style="background: linear-gradient(145deg, {{ dest.poster_from }}, {{ dest.poster_to }});">
+        
+        <!-- Header -->
+        <div class="flex items-start justify-between">
+          <span class="text-[10px] font-mono tracking-widest text-white/70 uppercase px-1.5 py-0.5 rounded bg-black/30 backdrop-blur-sm">
+            {{ dest.country_code }}
+          </span>
+          <span class="text-[11px] font-mono text-[#ff8a3d]">📌</span>
+        </div>
+
+        <!-- Title -->
+        <div class="mt-auto">
+          <h3 class="font-display font-bold text-lg sm:text-xl text-white leading-tight drop-shadow-md">
+            {{ dest.name }}
+          </h3>
+          <p class="text-[11px] text-white/70 font-mono drop-shadow">
+            {{ dest.country }}
+          </p>
+        </div>
+
+        <!-- Overlay Actions -->
+        <div class="poster-overlay">
+          <a href="/destinations/{{ dest.slug }}" class="w-full text-center py-1.5 bg-white text-black text-xs font-display font-bold rounded-lg hover:bg-white/90 transition-all">
+            view details
+          </a>
+          <button 
+            type="button"
+            onclick="openLogModal('{{ dest.slug }}', '{{ dest.name }}', '{{ dest.country }}')"
+            class="w-full py-1.5 bg-[#ff8a3d] text-black text-xs font-display font-bold rounded-lg hover:bg-[#ff8a3d]/90 transition-all shadow-md">
+            + log visit
+          </button>
+        </div>
+
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-[#171e26] border border-white/5 rounded-2xl p-12 text-center text-[#8a97a6] space-y-2">
+      <p class="font-display font-bold text-lg text-white">no dreams pinned yet</p>
+      <p class="text-xs font-mono">Explore trending destinations and pin spots you want to visit next.</p>
+      <a href="/explore" class="inline-block mt-3 px-5 py-2 bg-[#ff8a3d] text-black rounded-full font-display font-bold text-xs">
+        explore spots →
+      </a>
+    </div>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<!-- Leaflet & Heatmap Integration Script for Profile -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const heatPoints = {{ stats.heat_points | tojson }};
+  const visits = {{ visits | tojson }};
+  const homeLat = {{ profile_user.home_lat or 20.0 }};
+  const homeLng = {{ profile_user.home_lng or 50.0 }};
+
+  // 1. Initialize Leaflet Map with smooth zoom & dark canvas
+  const map = L.map('profile-heat-map', {
+    center: [homeLat, homeLng],
+    zoom: 2,
+    minZoom: 2,
+    maxZoom: 14,
+    scrollWheelZoom: false
+  });
+
+  // Dark CARTO tile layer
+  const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 19
+  }).addTo(map);
+
+  // 2. Leaflet Heat Layer (Hotspots)
+  let heatLayer = null;
+  if (heatPoints && heatPoints.length > 0 && typeof L.heatLayer === 'function') {
+    heatLayer = L.heatLayer(heatPoints, {
+      radius: 28,
+      blur: 20,
+      maxZoom: 9,
+      max: 1.0,
+      gradient: {
+        0.2: '#40bcf4',
+        0.5: '#00e054',
+        0.75: '#ff8a3d',
+        1.0: '#ff3366'
+      }
+    }).addTo(map);
+  }
+
+  // 3. Leaflet Visited Markers Group
+  const markerGroup = L.featureGroup().addTo(map);
+
+  // Home marker
+  if (homeLat !== 0 || homeLng !== 0) {
+    const homeIcon = L.divIcon({
+      className: 'home-pin-container',
+      html: '<div style="background:#ff8a3d; color:black; font-family:monospace; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:9999px; border:2px solid white; box-shadow:0 0 10px rgba(255,138,61,0.8);">HOME</div>',
+      iconSize: [45, 20],
+      iconAnchor: [22, 10]
+    });
+    L.marker([homeLat, homeLng], { icon: homeIcon })
+      .bindPopup(`
+        <div style="padding:12px; font-family:sans-serif;">
+          <div style="font-size:10px; font-family:monospace; color:#ff8a3d; text-transform:uppercase;">Traveler Base</div>
+          <div style="font-size:14px; font-weight:bold; color:white;">{{ profile_user.home_city or 'Base City' }}</div>
+        </div>
+      `)
+      .addTo(markerGroup);
+  }
+
+  // Visited destination markers
+  const seenSlugs = new Set();
+  visits.forEach(v => {
+    if (!v.destination) return;
+    const dest = v.destination;
+    if (seenSlugs.has(dest.slug)) return;
+    seenSlugs.add(dest.slug);
+
+    // Find destination coord from heatPoints or lookup
+    const pt = heatPoints.find(p => Math.abs(p[0]) > 0.1);
+    // Custom pulsing pin icon
+    const pinIcon = L.divIcon({
+      className: 'pulsing-map-pin',
+      html: '<div class="pin-pulse"></div><div class="pin-core"></div>',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    // Create marker at destination coords if available in visits data
+    // (We also inject visited marker lat/lng dynamically)
+  });
+
+  // Use heatPoints coordinates to drop interactive pins
+  heatPoints.forEach((hp, idx) => {
+    const lat = hp[0];
+    const lng = hp[1];
+    
+    // Find matching visit stamp if possible
+    const matchingVisit = visits[idx % visits.length];
+    const destName = matchingVisit ? matchingVisit.destination.name : 'Visited Location';
+    const destCountry = matchingVisit ? matchingVisit.destination.country : '';
+    const destSlug = matchingVisit ? matchingVisit.destination.slug : '';
+    const rating = matchingVisit ? matchingVisit.rating : '5.0';
+
+    const pinIcon = L.divIcon({
+      className: 'pulsing-map-pin',
+      html: '<div class="pin-pulse"></div><div class="pin-core"></div>',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const popupHtml = `
+      <div style="width:200px; padding:12px; font-family:sans-serif;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <span style="font-size:10px; font-family:monospace; color:#8a97a6; text-transform:uppercase;">${destCountry}</span>
+          <span style="font-size:11px; font-family:monospace; color:#00e054; font-weight:bold;">★ ${rating}</span>
+        </div>
+        <div style="font-size:14px; font-weight:bold; color:white; margin-bottom:8px;">${destName}</div>
+        ${destSlug ? `<a href="/destinations/${destSlug}" style="display:block; text-align:center; padding:5px 0; background:#ff8a3d; color:black; font-size:11px; font-weight:bold; border-radius:6px; text-decoration:none;">View Spot →</a>` : ''}
+      </div>
+    `;
+
+    L.marker([lat, lng], { icon: pinIcon })
+      .bindPopup(popupHtml)
+      .addTo(markerGroup);
+  });
+
+  // Smooth fit bounds or fly-in
+  if (markerGroup.getLayers().length > 0) {
+    try {
+      const bounds = markerGroup.getBounds();
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6 });
+    } catch(e) {}
+  }
+
+  // Global toggle helper for alpine buttons
+  window.filterProfileMap = (mode) => {
+    if (mode === 'all') {
+      if (heatLayer && !map.hasLayer(heatLayer)) map.addLayer(heatLayer);
+      if (!map.hasLayer(markerGroup)) map.addLayer(markerGroup);
+    } else if (mode === 'heat') {
+      if (heatLayer && !map.hasLayer(heatLayer)) map.addLayer(heatLayer);
+      if (map.hasLayer(markerGroup)) map.removeLayer(markerGroup);
+    } else if (mode === 'pins') {
+      if (heatLayer && map.hasLayer(heatLayer)) map.removeLayer(heatLayer);
+      if (!map.hasLayer(markerGroup)) map.addLayer(markerGroup);
+    }
+  };
+
+  window.resetProfileMap = () => {
+    if (markerGroup.getLayers().length > 0) {
+      map.fitBounds(markerGroup.getBounds(), { padding: [40, 40], maxZoom: 6 });
+    }
+  };
+});
+</script>
+{% endblock %}
