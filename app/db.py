@@ -12,6 +12,13 @@ engine = create_engine(
 
 def init_db():
     SQLModel.metadata.create_all(engine)
+    with engine.connect() as conn:
+        try:
+            from sqlalchemy import text
+            conn.execute(text("ALTER TABLE destination ADD COLUMN image_url TEXT"))
+            conn.commit()
+        except Exception:
+            pass
 
 def get_session():
     with Session(engine) as session:

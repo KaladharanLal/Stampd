@@ -41,6 +41,7 @@ class Destination(SQLModel, table=True):
     blurb: str = Field(default="")
     poster_from: str = Field(default="#171e26")
     poster_to: str = Field(default="#0e1318")
+    image_url: Optional[str] = Field(default=None)
 
     @property
     def tag_list(self) -> List[str]:
